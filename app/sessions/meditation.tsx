@@ -9,7 +9,8 @@ import Svg, { Circle } from 'react-native-svg';
 const { width } = Dimensions.get('window');
 const BASE_RADIUS = 120;
 const CENTER = 150; 
-const BORDER_WIDTH = 15;
+const INNER_STROKE = 7;
+const OUTER_STROKE = 10;
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
@@ -35,9 +36,6 @@ export default function MeditationScreen() {
           allowsRecordingIOS: false,
           playsInSilentModeIOS: true,
           staysActiveInBackground: true,
-          interruptionModeIOS: 1, 
-          interruptionModeAndroid: 1,
-          shouldDuckAndroid: true,
         });
         loadAndPlaySound(selectedAtmosphere);
       } catch (e) { console.log(e); }
@@ -107,11 +105,12 @@ export default function MeditationScreen() {
           <Text style={styles.controlText}>🎵</Text>
         </TouchableOpacity>
       </View>
+
       <View style={styles.circleWrapper}>
         <Svg width={300} height={300} style={styles.svg}>
-          <Circle cx={CENTER} cy={CENTER} r={BASE_RADIUS} stroke="#1a1a1a" strokeWidth={BORDER_WIDTH} fill="none" />
+          <Circle cx={CENTER} cy={CENTER} r={BASE_RADIUS} stroke="#1a1a1a" strokeWidth={INNER_STROKE} fill="none" />
           <AnimatedCircle
-            cx={CENTER} cy={CENTER} r={BASE_RADIUS} stroke="#fff" strokeWidth={BORDER_WIDTH} fill="none"
+            cx={CENTER} cy={CENTER} r={BASE_RADIUS} stroke="#fff" strokeWidth={OUTER_STROKE} fill="none"
             animatedProps={animatedProgressProps}
             strokeLinecap="round"
             strokeDasharray={2 * Math.PI * BASE_RADIUS}
@@ -124,7 +123,23 @@ export default function MeditationScreen() {
           <Text style={styles.timerText}>{formatTime(remainingSeconds)}</Text>
         </View>
       </View>
-      <TouchableOpacity style={styles.exitButton} onPress={() => router.replace('/')}><Text style={styles.exitButtonText}>EXIT</Text></TouchableOpacity>
+
+      {/* FAST FORWARD FOR TESTING */}
+      <View style={{ width: 200, marginBottom: 50, opacity: 0.4 }}>
+          <Text style={{ color: '#fff', fontSize: 10, textAlign: 'center', marginBottom: 5 }}>DEBUG: SKIP TO END</Text>
+          <Slider
+            minimumValue={0}
+            maximumValue={totalSeconds}
+            value={totalSeconds - remainingSeconds}
+            onValueChange={(val) => setRemainingSeconds(totalSeconds - Math.floor(val))}
+            minimumTrackTintColor="#ff4444"
+          />
+      </View>
+
+      <TouchableOpacity style={styles.exitButton} onPress={() => router.replace('/')}>
+        <Text style={styles.exitButtonText}>EXIT</Text>
+      </TouchableOpacity>
+
       <Modal visible={modalVisible} animationType="slide" transparent={true}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setModalVisible(false)}>
           <View style={styles.modalContent}>
@@ -152,7 +167,7 @@ const styles = StyleSheet.create({
   circle: { alignItems: 'center' },
   label: { color: '#fff', letterSpacing: 4, fontSize: 12, opacity: 0.5, marginBottom: 5 },
   timerText: { fontSize: 54, fontWeight: '300', color: '#fff' },
-  exitButton: { position: 'absolute', bottom: 80, paddingVertical: 15, paddingHorizontal: 40, backgroundColor: '#1a1a1a', borderRadius: 25 },
+  exitButton: { paddingVertical: 15, paddingHorizontal: 40, backgroundColor: '#1a1a1a', borderRadius: 25 },
   exitButtonText: { color: '#fff', fontWeight: 'bold' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
   modalContent: { backgroundColor: '#1a1a1a', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 30, alignItems: 'center' },

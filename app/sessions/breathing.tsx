@@ -9,8 +9,8 @@ import Svg, { Circle } from 'react-native-svg';
 
 const { width } = Dimensions.get('window');
 const BASE_RADIUS = 100;
-const INNER_STROKE = 7; // Your requested 3px grey ring
-const OUTER_STROKE = 10; // Your requested 6px white progress ring
+const INNER_STROKE = 7; 
+const OUTER_STROKE = 10; 
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 const PHASES = ['INHALE', 'HOLD', 'EXHALE', 'HOLD'];
@@ -23,7 +23,7 @@ export default function BreathingScreen() {
   const totalSeconds = selectedDuration * 60;
   
   const [remainingSeconds, setRemainingSeconds] = useState(totalSeconds);
-  const [phaseIndex, setPhaseIndex] = useState(0); // Starts at 0 (INHALE)
+  const [phaseIndex, setPhaseIndex] = useState(0); 
   const [phaseTimer, setPhaseTimer] = useState(4);
   
   const [hapticsEnabled, setHapticsEnabled] = useState(true);
@@ -35,7 +35,6 @@ export default function BreathingScreen() {
   const breathScale = useSharedValue(1);
   const sessionProgress = useSharedValue(0);
 
-  // 1. AUDIO INIT
   useEffect(() => {
     async function initAudio() {
       try {
@@ -63,10 +62,8 @@ export default function BreathingScreen() {
     } catch (e) { console.log(e); }
   }
 
-  // 2. MAIN TIMER & PHASE LOGIC
   useEffect(() => {
     const interval = setInterval(() => {
-      // Global countdown
       setRemainingSeconds((prev) => {
         if (prev <= 1) {
           clearInterval(interval);
@@ -76,7 +73,6 @@ export default function BreathingScreen() {
         return prev - 1;
       });
 
-      // Phase countdown (Box breathing 4-4-4-4)
       setPhaseTimer((prev) => {
         if (prev <= 1) {
           setPhaseIndex((idx) => (idx + 1) % 4);
@@ -90,29 +86,20 @@ export default function BreathingScreen() {
     return () => clearInterval(interval);
   }, [hapticsEnabled]);
 
-  // 3. ANIMATION TRIGGERS
   useEffect(() => {
     const currentPhase = PHASES[phaseIndex];
-    
-    // Scale the rings based on phase
     if (currentPhase === 'INHALE') {
       breathScale.value = withTiming(1.4, { duration: 4000, easing: Easing.out(Easing.poly(4)) });
     } else if (currentPhase === 'EXHALE') {
       breathScale.value = withTiming(1, { duration: 4000, easing: Easing.inOut(Easing.quad) });
     }
-    // HOLD keeps the current scale.value
-
-    // Update overall session progress ring
     sessionProgress.value = withTiming((totalSeconds - remainingSeconds) / totalSeconds, { duration: 1000 });
   }, [phaseIndex, remainingSeconds]);
 
-  // 4. ANIMATED PROPS FOR SVG
-  // Grey Base Ring (3px) - expands/contracts with breath
   const baseRingProps = useAnimatedProps(() => ({
     r: BASE_RADIUS * breathScale.value,
   }));
 
-  // White Progress Ring (10px) - expands/contracts WITH the grey ring while filling up
   const progressRingProps = useAnimatedProps(() => {
     const dynamicRadius = BASE_RADIUS * breathScale.value;
     const circumference = 2 * Math.PI * dynamicRadius;
@@ -131,7 +118,6 @@ export default function BreathingScreen() {
 
   return (
     <View style={styles.container}>
-      {/* HEADER */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => setHapticsEnabled(!hapticsEnabled)}>
           <Text style={styles.icon}>{hapticsEnabled ? '📳' : '🔇'}</Text>
@@ -145,17 +131,14 @@ export default function BreathingScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* BREATHING ENGINE */}
       <View style={styles.centerContainer}>
         <Svg width={width} height={width} style={styles.svg}>
-          {/* Grey Base Ring (7px) */}
           <AnimatedCircle 
             cx={width / 2} cy={width / 2} 
             stroke="#333" strokeWidth={INNER_STROKE} 
             fill="none" 
             animatedProps={baseRingProps} 
           />
-          {/* White Progress Ring (10px) */}
           <AnimatedCircle 
             cx={width / 2} cy={width / 2} 
             stroke="#fff" strokeWidth={OUTER_STROKE} 
@@ -172,15 +155,26 @@ export default function BreathingScreen() {
         </View>
       </View>
 
-      {/* FOOTER */}
       <View style={styles.footer}>
         <Text style={styles.mainTimer}>{formatTime(remainingSeconds)}</Text>
+        
+        {/* FAST FORWARD FOR TESTING */}
+        <View style={{ width: 200, marginBottom: 20, opacity: 0.4 }}>
+           <Text style={{ color: '#fff', fontSize: 10, textAlign: 'center', marginBottom: 5 }}>DEBUG: SKIP TO END</Text>
+           <Slider
+             minimumValue={0}
+             maximumValue={totalSeconds}
+             value={totalSeconds - remainingSeconds}
+             onValueChange={(val) => setRemainingSeconds(totalSeconds - Math.floor(val))}
+             minimumTrackTintColor="#ff4444"
+           />
+        </View>
+
         <TouchableOpacity style={styles.exitBtn} onPress={() => router.replace('/')}>
           <Text style={styles.exitText}>EXIT</Text>
         </TouchableOpacity>
       </View>
 
-      {/* ATMOSPHERE MODAL */}
       <Modal visible={modalVisible} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
