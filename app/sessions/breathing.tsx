@@ -19,9 +19,15 @@ export default function BreathingScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
 
-  const selectedDuration = parseInt(params.duration as string) || 3;
-  const totalSeconds = selectedDuration * 60;
-  
+  // --- AUTO-SNAP LOGIC ---
+  // Calculates total duration so the session ALWAYS ends on a completed INHALE
+  const totalSeconds = (() => {
+    const requested = (parseInt(params.duration as string) || 3) * 60;
+    const nearestCycles = Math.round(requested / 16);
+    // (Cycles * 16) ends on HOLD. Adding 4s ends it exactly after the final INHALE.
+    return (nearestCycles * 16) + 4; 
+  })();
+
   const [remainingSeconds, setRemainingSeconds] = useState(totalSeconds);
   const [phaseIndex, setPhaseIndex] = useState(0); 
   const [phaseTimer, setPhaseTimer] = useState(4);
@@ -32,21 +38,25 @@ export default function BreathingScreen() {
   const [atmosphere, setAtmosphere] = useState(params.atmosphere as string || 'WIND');
 
   const sound = useRef(new Audio.Sound());
+  const isTransitioning = useRef(false); 
   const breathScale = useSharedValue(1);
   const sessionProgress = useSharedValue(0);
 
+  // Audio Logic
   useEffect(() => {
     async function initAudio() {
       try {
         await Audio.setAudioModeAsync({ playsInSilentModeIOS: true, staysActiveInBackground: true });
         loadAtmosphere(atmosphere);
-      } catch (e) { console.log(e); }
+      } catch (e) { console.log("Audio Init Error:", e); }
     }
     initAudio();
     return () => { sound.current.unloadAsync().catch(() => {}); };
   }, [atmosphere]);
 
   async function loadAtmosphere(type: string) {
+    if (isTransitioning.current) return;
+    isTransitioning.current = true;
     try {
       const status = await sound.current.getStatusAsync();
       if (status.isLoaded) await sound.current.unloadAsync();
@@ -59,22 +69,32 @@ export default function BreathingScreen() {
       await sound.current.setIsLoopingAsync(true);
       await sound.current.setVolumeAsync(volume);
       await sound.current.playAsync();
-    } catch (e) { console.log(e); }
+    } catch (e) { console.log("Load Error:", e); }
+    finally { isTransitioning.current = false; }
   }
 
+  // --- IMPROVED UNIFIED TIMER ---
   useEffect(() => {
     const interval = setInterval(() => {
+      // 1. Handle the Main Session Timer
       setRemainingSeconds((prev) => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          router.replace('/success');
-          return 0;
-        }
+        if (prev <= 1) return 0; // Hold at 0 until Phase Timer clears
         return prev - 1;
       });
 
+      // 2. Handle the Phase (4s) Timer
       setPhaseTimer((prev) => {
         if (prev <= 1) {
+          // CHECK FOR END OF SESSION:
+          // If main timer is 0 (or almost 0) and we just finished the 4s phase...
+          setRemainingSeconds((currentTotal) => {
+            if (currentTotal <= 0) {
+              clearInterval(interval);
+              router.replace('/success');
+            }
+            return currentTotal;
+          });
+
           setPhaseIndex((idx) => (idx + 1) % 4);
           if (hapticsEnabled) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
           return 4;
@@ -84,8 +104,9 @@ export default function BreathingScreen() {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [hapticsEnabled]);
+  }, [hapticsEnabled, totalSeconds]);
 
+  // Animation Logic
   useEffect(() => {
     const currentPhase = PHASES[phaseIndex];
     if (currentPhase === 'INHALE') {
@@ -93,6 +114,7 @@ export default function BreathingScreen() {
     } else if (currentPhase === 'EXHALE') {
       breathScale.value = withTiming(1, { duration: 4000, easing: Easing.inOut(Easing.quad) });
     }
+    // Update global progress bar
     sessionProgress.value = withTiming((totalSeconds - remainingSeconds) / totalSeconds, { duration: 1000 });
   }, [phaseIndex, remainingSeconds]);
 
@@ -120,7 +142,10 @@ export default function BreathingScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => setHapticsEnabled(!hapticsEnabled)}>
-          <Text style={styles.icon}>{hapticsEnabled ? '📳' : '🔇'}</Text>
+          <Image 
+            source={require('../../assets/images/whitevibrationsicon.png')} 
+            style={[styles.musicIconImage, { opacity: hapticsEnabled ? 1 : 0.3 }]} 
+          />
         </TouchableOpacity>
         
         <TouchableOpacity onPress={() => setModalVisible(true)}>
@@ -158,16 +183,16 @@ export default function BreathingScreen() {
       <View style={styles.footer}>
         <Text style={styles.mainTimer}>{formatTime(remainingSeconds)}</Text>
         
-        {/* FAST FORWARD FOR TESTING */}
+        {/* DEBUG SLIDER - Keeps your feature intact */}
         <View style={{ width: 200, marginBottom: 20, opacity: 0.4 }}>
-           <Text style={{ color: '#fff', fontSize: 10, textAlign: 'center', marginBottom: 5 }}>DEBUG: SKIP TO END</Text>
-           <Slider
-             minimumValue={0}
-             maximumValue={totalSeconds}
-             value={totalSeconds - remainingSeconds}
-             onValueChange={(val) => setRemainingSeconds(totalSeconds - Math.floor(val))}
-             minimumTrackTintColor="#ff4444"
-           />
+            <Text style={{ color: '#fff', fontSize: 10, textAlign: 'center', marginBottom: 5 }}>DEBUG: SKIP TO END</Text>
+            <Slider
+              minimumValue={0}
+              maximumValue={totalSeconds}
+              value={totalSeconds - remainingSeconds}
+              onValueChange={(val) => setRemainingSeconds(totalSeconds - Math.floor(val))}
+              minimumTrackTintColor="#ff4444"
+            />
         </View>
 
         <TouchableOpacity style={styles.exitBtn} onPress={() => router.replace('/')}>
@@ -211,7 +236,6 @@ export default function BreathingScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#020403', alignItems: 'center' },
   header: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 40, paddingTop: 60, width: '100%', alignItems: 'center' },
-  icon: { fontSize: 24, color: '#fff' },
   musicIconImage: { width: 28, height: 28, resizeMode: 'contain' },
   centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   svg: { position: 'absolute' },
