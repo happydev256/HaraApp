@@ -4,12 +4,13 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 export default function HomeScreen() {
   const router = useRouter();
 
-  // Helper function to navigate to pickup with the correct session type
+  // Helper function to navigate to the specific pickup screens
   const startFlow = (type: 'BREATHING' | 'MEDITATION') => {
-    router.push({
-      pathname: '/pickup',
-      params: { type: type }
-    });
+    if (type === 'BREATHING') {
+      router.push('/pickups/pickup'); // Points to pickups/pickup.tsx
+    } else {
+      router.push('/pickups/meditation-pickup'); // Points to pickups/meditation-pickup.tsx
+    }
   };
 
   return (
@@ -26,7 +27,7 @@ export default function HomeScreen() {
       <View style={styles.mainContent}>
         <Text style={styles.title}>HARA</Text>
 
-        {/* HARA RITUAL - Sends 'BREATHING' type */}
+        {/* HARA RITUAL - Now goes to pickups/pickup.tsx */}
         <TouchableOpacity 
           style={styles.ritualButton}
           onPress={() => startFlow('BREATHING')}
@@ -40,7 +41,7 @@ export default function HomeScreen() {
           </View>
         </TouchableOpacity>
 
-        {/* MEDITATION - Sends 'MEDITATION' type */}
+        {/* MEDITATION - Now goes to pickups/meditation-pickup.tsx */}
         <TouchableOpacity 
           style={styles.ritualButton}
           onPress={() => startFlow('MEDITATION')}

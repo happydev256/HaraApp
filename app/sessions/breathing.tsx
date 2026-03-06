@@ -20,16 +20,22 @@ export default function BreathingScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
 
-  // --- AUTO-SNAP LOGIC ---
+  // --- DYNAMIC HARA & SESSION LOGIC ---
+  // 1. Get haraTime from params (e.g., 3, 4, 5, 6s), default to 4
+  const haraTime = parseInt(params.haraTime as string) || 4;
+
+  // 2. Adjust total session seconds to snap to the custom hara cycle
   const totalSeconds = (() => {
     const requested = (parseInt(params.duration as string) || 3) * 60;
-    const nearestCycles = Math.round(requested / 16);
-    return (nearestCycles * 16) + 4; 
+    const cycleLength = haraTime * 4; // Total time for one full Inhale-Hold-Exhale-Hold
+    const nearestCycles = Math.round(requested / cycleLength);
+    return (nearestCycles * cycleLength) + haraTime; 
   })();
 
   const [remainingSeconds, setRemainingSeconds] = useState(totalSeconds);
   const [phaseIndex, setPhaseIndex] = useState(0); 
-  const [phaseTimer, setPhaseTimer] = useState(4);
+  // 3. Start the countdown at the custom haraTime
+  const [phaseTimer, setPhaseTimer] = useState(haraTime);
   
   const [hapticsEnabled, setHapticsEnabled] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
@@ -41,7 +47,7 @@ export default function BreathingScreen() {
   const breathScale = useSharedValue(1);
   const sessionProgress = useSharedValue(0);
 
-  // --- 1. RESOLVE "KEEP AWAKE" & AUDIO INIT ---
+  // --- AUDIO & SCREEN STABILITY ---
   useEffect(() => {
     KeepAwake.activateKeepAwakeAsync();
 
@@ -59,9 +65,7 @@ export default function BreathingScreen() {
     }
     initAudio();
 
-    // --- 2. THE CLEANUP ---
     return () => {
-      // Fix: Use deactivateKeepAwake (no Async) to allow screen to sleep again
       KeepAwake.deactivateKeepAwake(); 
       if (sound.current) {
         sound.current.unloadAsync().catch(() => {});
@@ -99,6 +103,7 @@ export default function BreathingScreen() {
     }
   }
 
+  // --- DYNAMIC TIMER INTERVAL ---
   useEffect(() => {
     const interval = setInterval(() => {
       setRemainingSeconds((prev) => (prev <= 1 ? 0 : prev - 1));
@@ -115,24 +120,29 @@ export default function BreathingScreen() {
 
           setPhaseIndex((idx) => (idx + 1) % 4);
           if (hapticsEnabled) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-          return 4;
+          // 4. Return to haraTime on phase change
+          return haraTime;
         }
         return prev - 1;
       });
     }, 1000);
 
     return () => clearInterval(interval); 
-  }, [hapticsEnabled, totalSeconds]);
+  }, [hapticsEnabled, totalSeconds, haraTime]);
 
+  // --- DYNAMIC ANIMATION SYNC ---
   useEffect(() => {
     const currentPhase = PHASES[phaseIndex];
+    // 5. Match animation speed to the hara seconds
+    const animDuration = haraTime * 1000;
+
     if (currentPhase === 'INHALE') {
-      breathScale.value = withTiming(1.4, { duration: 4000, easing: Easing.out(Easing.poly(4)) });
+      breathScale.value = withTiming(1.4, { duration: animDuration, easing: Easing.out(Easing.poly(4)) });
     } else if (currentPhase === 'EXHALE') {
-      breathScale.value = withTiming(1, { duration: 4000, easing: Easing.inOut(Easing.quad) });
+      breathScale.value = withTiming(1, { duration: animDuration, easing: Easing.inOut(Easing.quad) });
     }
     sessionProgress.value = withTiming((totalSeconds - remainingSeconds) / totalSeconds, { duration: 1000 });
-  }, [phaseIndex, remainingSeconds]);
+  }, [phaseIndex, remainingSeconds, haraTime]);
 
   const baseRingProps = useAnimatedProps(() => ({
     r: BASE_RADIUS * breathScale.value,
