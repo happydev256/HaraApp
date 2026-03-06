@@ -1,6 +1,7 @@
 import Slider from '@react-native-community/slider';
 import { Audio } from 'expo-av';
 import * as Haptics from 'expo-haptics';
+import * as KeepAwake from 'expo-keep-awake';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import { Dimensions, Image, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -20,11 +21,9 @@ export default function BreathingScreen() {
   const params = useLocalSearchParams();
 
   // --- AUTO-SNAP LOGIC ---
-  // Calculates total duration so the session ALWAYS ends on a completed INHALE
   const totalSeconds = (() => {
     const requested = (parseInt(params.duration as string) || 3) * 60;
     const nearestCycles = Math.round(requested / 16);
-    // (Cycles * 16) ends on HOLD. Adding 4s ends it exactly after the final INHALE.
     return (nearestCycles * 16) + 4; 
   })();
 
@@ -37,56 +36,75 @@ export default function BreathingScreen() {
   const [volume, setVolume] = useState(0.7);
   const [atmosphere, setAtmosphere] = useState(params.atmosphere as string || 'WIND');
 
-  const sound = useRef(new Audio.Sound());
+  const sound = useRef<Audio.Sound | null>(null); 
   const isTransitioning = useRef(false); 
   const breathScale = useSharedValue(1);
   const sessionProgress = useSharedValue(0);
 
-  // Audio Logic
+  // --- 1. RESOLVE "KEEP AWAKE" & AUDIO INIT ---
   useEffect(() => {
+    KeepAwake.activateKeepAwakeAsync();
+
     async function initAudio() {
       try {
-        await Audio.setAudioModeAsync({ playsInSilentModeIOS: true, staysActiveInBackground: true });
-        loadAtmosphere(atmosphere);
-      } catch (e) { console.log("Audio Init Error:", e); }
+        await Audio.setAudioModeAsync({ 
+          playsInSilentModeIOS: true, 
+          staysActiveInBackground: true, 
+          shouldDuckAndroid: true,
+        });
+        await loadAtmosphere(atmosphere);
+      } catch (e) { 
+        console.warn("Audio Init Error:", e); 
+      }
     }
     initAudio();
-    return () => { sound.current.unloadAsync().catch(() => {}); };
+
+    // --- 2. THE CLEANUP ---
+    return () => {
+      // Fix: Use deactivateKeepAwake (no Async) to allow screen to sleep again
+      KeepAwake.deactivateKeepAwake(); 
+      if (sound.current) {
+        sound.current.unloadAsync().catch(() => {});
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (sound.current) loadAtmosphere(atmosphere);
   }, [atmosphere]);
 
   async function loadAtmosphere(type: string) {
     if (isTransitioning.current) return;
     isTransitioning.current = true;
     try {
-      const status = await sound.current.getStatusAsync();
-      if (status.isLoaded) await sound.current.unloadAsync();
+      if (sound.current) {
+        await sound.current.unloadAsync();
+      }
       
+      const newSound = new Audio.Sound();
+      sound.current = newSound;
+
       let file = require('../../assets/music/windscape.mp3');
       if (type === 'FOREST') file = require('../../assets/music/forest.mp3');
       if (type === 'COSMIC') file = require('../../assets/music/cosmic.mp3');
       
-      await sound.current.loadAsync(file);
-      await sound.current.setIsLoopingAsync(true);
-      await sound.current.setVolumeAsync(volume);
-      await sound.current.playAsync();
-    } catch (e) { console.log("Load Error:", e); }
-    finally { isTransitioning.current = false; }
+      await newSound.loadAsync(file);
+      await newSound.setIsLoopingAsync(true);
+      await newSound.setVolumeAsync(volume);
+      await newSound.playAsync();
+    } catch (e) { 
+      console.log("Load Error:", e); 
+    } finally { 
+      isTransitioning.current = false; 
+    }
   }
 
-  // --- IMPROVED UNIFIED TIMER ---
   useEffect(() => {
     const interval = setInterval(() => {
-      // 1. Handle the Main Session Timer
-      setRemainingSeconds((prev) => {
-        if (prev <= 1) return 0; // Hold at 0 until Phase Timer clears
-        return prev - 1;
-      });
+      setRemainingSeconds((prev) => (prev <= 1 ? 0 : prev - 1));
 
-      // 2. Handle the Phase (4s) Timer
       setPhaseTimer((prev) => {
         if (prev <= 1) {
-          // CHECK FOR END OF SESSION:
-          // If main timer is 0 (or almost 0) and we just finished the 4s phase...
           setRemainingSeconds((currentTotal) => {
             if (currentTotal <= 0) {
               clearInterval(interval);
@@ -103,10 +121,9 @@ export default function BreathingScreen() {
       });
     }, 1000);
 
-    return () => clearInterval(interval);
+    return () => clearInterval(interval); 
   }, [hapticsEnabled, totalSeconds]);
 
-  // Animation Logic
   useEffect(() => {
     const currentPhase = PHASES[phaseIndex];
     if (currentPhase === 'INHALE') {
@@ -114,7 +131,6 @@ export default function BreathingScreen() {
     } else if (currentPhase === 'EXHALE') {
       breathScale.value = withTiming(1, { duration: 4000, easing: Easing.inOut(Easing.quad) });
     }
-    // Update global progress bar
     sessionProgress.value = withTiming((totalSeconds - remainingSeconds) / totalSeconds, { duration: 1000 });
   }, [phaseIndex, remainingSeconds]);
 
@@ -183,7 +199,6 @@ export default function BreathingScreen() {
       <View style={styles.footer}>
         <Text style={styles.mainTimer}>{formatTime(remainingSeconds)}</Text>
         
-        {/* DEBUG SLIDER - Keeps your feature intact */}
         <View style={{ width: 200, marginBottom: 20, opacity: 0.4 }}>
             <Text style={{ color: '#fff', fontSize: 10, textAlign: 'center', marginBottom: 5 }}>DEBUG: SKIP TO END</Text>
             <Slider
@@ -218,7 +233,10 @@ export default function BreathingScreen() {
             <Slider 
               style={{ width: '100%', height: 40 }} 
               value={volume} 
-              onValueChange={(v) => { setVolume(v); sound.current.setVolumeAsync(v); }}
+              onValueChange={(v) => { 
+                setVolume(v); 
+                if (sound.current) sound.current.setVolumeAsync(v); 
+              }}
               minimumTrackTintColor="#fff"
               maximumTrackTintColor="#333"
               thumbTintColor="#fff"
