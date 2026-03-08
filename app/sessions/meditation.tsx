@@ -18,6 +18,7 @@ export default function MeditationScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
 
+  // Get the duration from the previous screen, default to 5 if not found
   const selectedDuration = parseInt(params.duration as string) || 5;
   const totalSeconds = selectedDuration * 60;
   
@@ -66,12 +67,12 @@ export default function MeditationScreen() {
     } catch (error) { console.log('Audio Error:', error); }
   }
 
+  // TIMER LOGIC: Handles only the countdown numbers
   useEffect(() => {
     const interval = setInterval(() => {
       setRemainingSeconds((prev) => {
-        if (prev <= 1) {
+        if (prev <= 0) {
           clearInterval(interval);
-          router.replace('/success');
           return 0;
         }
         return prev - 1;
@@ -80,9 +81,24 @@ export default function MeditationScreen() {
     return () => clearInterval(interval);
   }, []);
 
+  // NAVIGATION & PROGRESS LOGIC: Monitors when timer hits zero
   useEffect(() => {
+    if (remainingSeconds <= 0) {
+      const timeout = setTimeout(() => {
+        // We pass the type and duration to the success screen so it saves correctly
+        router.replace({
+            pathname: '/success',
+            params: { 
+              type: 'Meditation', 
+              duration: selectedDuration.toString() 
+            }
+        });
+      }, 100);
+      return () => clearTimeout(timeout);
+    }
+    // Update the visual progress ring
     sessionProgress.value = withTiming((totalSeconds - remainingSeconds) / totalSeconds, { duration: 500 });
-  }, [remainingSeconds]);
+  }, [remainingSeconds, totalSeconds]);
 
   const animatedProgressProps = useAnimatedProps(() => {
     const circumference = 2 * Math.PI * BASE_RADIUS;
@@ -124,7 +140,7 @@ export default function MeditationScreen() {
         </View>
       </View>
 
-      {/* FAST FORWARD FOR TESTING */}
+      {/* DEBUG SLIDER - KEEPING FOR YOUR TESTING */}
       <View style={{ width: 200, marginBottom: 50, opacity: 0.4 }}>
           <Text style={{ color: '#fff', fontSize: 10, textAlign: 'center', marginBottom: 5 }}>DEBUG: SKIP TO END</Text>
           <Slider

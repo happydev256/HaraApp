@@ -13,11 +13,12 @@ export default function PickupScreen() {
   const sessionType = params.type as string || 'SESSION'; 
 
   const [duration, setDuration] = useState(3);
-  const [atmosphere, setAtmosphere] = useState('WIND');
+  const [atmosphere, setAtmosphere] = useState('WIND'); // Default set to WIND
   const [haraSeconds, setHaraSeconds] = useState(4); 
 
   const previewSound = useRef(new Audio.Sound());
   const previewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoPlayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null); // Ref for the initial delay
 
   const atmospheres = [
     { id: 'WIND', label: 'WIND', icon: '🌬️', file: require('../../assets/music/windscape.mp3') },
@@ -29,7 +30,10 @@ export default function PickupScreen() {
 
   async function playPreview(type: string) {
     try {
+      // Clear any pending timers if the user interacts
       if (previewTimerRef.current) clearTimeout(previewTimerRef.current);
+      if (autoPlayTimerRef.current) clearTimeout(autoPlayTimerRef.current);
+      
       await previewSound.current.unloadAsync().catch(() => {});
       
       const selected = atmospheres.find(a => a.id === type);
@@ -49,15 +53,22 @@ export default function PickupScreen() {
     }
   }
 
+  // Handle the 2-second delay auto-play on mount
   useEffect(() => {
+    autoPlayTimerRef.current = setTimeout(() => {
+      playPreview('WIND');
+    }, 2000);
+
     return () => {
       if (previewTimerRef.current) clearTimeout(previewTimerRef.current);
+      if (autoPlayTimerRef.current) clearTimeout(autoPlayTimerRef.current);
       previewSound.current.unloadAsync().catch(() => {});
     };
   }, []);
 
   const handleStartSession = async () => {
     if (previewTimerRef.current) clearTimeout(previewTimerRef.current);
+    if (autoPlayTimerRef.current) clearTimeout(autoPlayTimerRef.current);
     await previewSound.current.unloadAsync().catch(() => {});
 
     const targetPath = sessionType === 'MEDITATION' 
@@ -116,7 +127,11 @@ export default function PickupScreen() {
           <Text style={styles.sectionTitle}>ATMOSPHERE</Text>
           <View style={styles.atmosphereRow}>
             {atmospheres.map((item) => (
-              <TouchableOpacity key={item.id} style={styles.atmosphereItem} onPress={() => { setAtmosphere(item.id); playPreview(item.id); }}>
+              <TouchableOpacity 
+                key={item.id} 
+                style={styles.atmosphereItem} 
+                onPress={() => { setAtmosphere(item.id); playPreview(item.id); }}
+              >
                 <View style={[styles.iconSquare, atmosphere === item.id && styles.activeSquare]}>
                   <Text style={styles.iconEmoji}>{item.icon}</Text>
                 </View>

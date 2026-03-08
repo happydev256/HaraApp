@@ -1,33 +1,88 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useIsFocused } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
+import React, { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 export default function HomeScreen() {
   const router = useRouter();
+  const isFocused = useIsFocused();
+  const [streakCount, setStreakCount] = useState(0);
+  const [journeyPercent, setJourneyPercent] = useState(0); // New state for the Journey Ring
 
-  // Helper function to navigate to the specific pickup screens
+  // Updated function to load all dashboard data
+  const loadDashboardData = useCallback(async () => {
+    try {
+      const savedData = await AsyncStorage.getItem('completed_sessions');
+      if (savedData !== null) {
+        const sessionsObj = JSON.parse(savedData);
+        
+        if (Array.isArray(sessionsObj)) {
+          setStreakCount(0);
+          setJourneyPercent(0);
+          return;
+        }
+
+        const dates = Object.keys(sessionsObj);
+        
+        // 1. ALL-TIME STREAK
+        setStreakCount(dates.length);
+
+        // 2. JOURNEY RING (MONTHLY LOGIC)
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const currentMonth = now.getMonth() + 1; // JS months are 0-indexed
+        const dayOfMonth = now.getDate();
+
+        // Format month for comparison (e.g., "2026-03")
+        const monthString = `${currentYear}-${String(currentMonth).padStart(2, '0')}`;
+        
+        // Count unique days practiced this specific month
+        const daysPracticedThisMonth = dates.filter(date => date.startsWith(monthString)).length;
+
+        // Calculate percentage based on days passed so far this month
+        // If today is the 8th and you practiced 8 days, you get 100%
+        const calculatedPercent = dayOfMonth > 0 
+          ? Math.min(Math.round((daysPracticedThisMonth / dayOfMonth) * 100), 100) 
+          : 0;
+
+        setJourneyPercent(calculatedPercent);
+      }
+    } catch (error) {
+      console.log("Error loading dashboard data:", error);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isFocused) {
+      loadDashboardData();
+    }
+  }, [isFocused, loadDashboardData]);
+
   const startFlow = (type: 'BREATHING' | 'MEDITATION') => {
     if (type === 'BREATHING') {
-      router.push('/pickups/pickup'); // Points to pickups/pickup.tsx
+      router.push('/pickups/pickup');
     } else {
-      router.push('/pickups/meditation-pickup'); // Points to pickups/meditation-pickup.tsx
+      router.push('/pickups/meditation-pickup');
     }
   };
 
   return (
     <View style={styles.container}>
-      {/* 1. STREAK */}
+      {/* 1. DYNAMIC STREAK */}
       <TouchableOpacity 
         style={styles.streakContainer} 
         onPress={() => router.push('/journey')}
       >
         <Text style={styles.streakEmoji}>🔥</Text>
-        <Text style={styles.streakText}>14 DAYS STREAK</Text>
+        <Text style={styles.streakText}>
+          {streakCount} {streakCount === 1 ? 'DAY' : 'DAYS'} STREAK
+        </Text>
       </TouchableOpacity>
 
       <View style={styles.mainContent}>
         <Text style={styles.title}>HARA</Text>
 
-        {/* HARA RITUAL - Now goes to pickups/pickup.tsx */}
         <TouchableOpacity 
           style={styles.ritualButton}
           onPress={() => startFlow('BREATHING')}
@@ -41,7 +96,6 @@ export default function HomeScreen() {
           </View>
         </TouchableOpacity>
 
-        {/* MEDITATION - Now goes to pickups/meditation-pickup.tsx */}
         <TouchableOpacity 
           style={styles.ritualButton}
           onPress={() => startFlow('MEDITATION')}
@@ -58,24 +112,26 @@ export default function HomeScreen() {
         <Text style={styles.dashboardTitle}>VITALITY DASHBOARD</Text>
         
         <View style={styles.statsContainer}>
-          {/* JOURNEY RING */}
+          {/* JOURNEY RING - Now dynamic based on Monthly Progress */}
           <TouchableOpacity 
             style={styles.statItem} 
             onPress={() => router.push('/journey')}
           >
-            <View style={styles.statCircle}><Text style={styles.statText}>67%</Text></View>
+            <View style={styles.statCircle}>
+              <Text style={styles.statText}>{journeyPercent}%</Text>
+            </View>
             <Text style={styles.statLabel}>JOURNEY</Text>
           </TouchableOpacity>
 
-          {/* FOCUS RING */}
+          {/* FOCUS RING - Set to 0% for now */}
           <View style={styles.statItem}>
-            <View style={styles.statCircle}><Text style={styles.statText}>67%</Text></View>
+            <View style={styles.statCircle}><Text style={styles.statText}>0%</Text></View>
             <Text style={styles.statLabel}>FOCUS</Text>
           </View>
 
-          {/* CHALLENGES RING */}
+          {/* CHALLENGES RING - Set to 0% for now */}
           <View style={styles.statItem}>
-            <View style={styles.statCircle}><Text style={styles.statText}>67%</Text></View>
+            <View style={styles.statCircle}><Text style={styles.statText}>0%</Text></View>
             <Text style={styles.statLabel}>CHALLENGES</Text>
           </View>
         </View>

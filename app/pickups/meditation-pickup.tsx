@@ -9,10 +9,12 @@ const { width } = Dimensions.get('window');
 export default function MeditationPickupScreen() {
   const router = useRouter();
   const [duration, setDuration] = useState(10); 
-  const [atmosphere, setAtmosphere] = useState('COSMIC');
+  // Set default atmosphere to WIND
+  const [atmosphere, setAtmosphere] = useState('WIND');
 
   const previewSound = useRef(new Audio.Sound());
   const previewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoPlayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const atmospheres = [
     { id: 'WIND', label: 'WIND', icon: '🌬️', file: require('../../assets/music/windscape.mp3') },
@@ -22,29 +24,48 @@ export default function MeditationPickupScreen() {
 
   async function playPreview(type: string) {
     try {
+      // Clear any existing timers (including the auto-play one if user clicks manually)
       if (previewTimerRef.current) clearTimeout(previewTimerRef.current);
+      if (autoPlayTimerRef.current) clearTimeout(autoPlayTimerRef.current);
+      
       await previewSound.current.unloadAsync().catch(() => {});
+      
       const selected = atmospheres.find(a => a.id === type);
       if (selected) {
         await previewSound.current.loadAsync(selected.file);
         await previewSound.current.playAsync();
+        
+        // Stop preview after 4 seconds
         previewTimerRef.current = setTimeout(async () => {
           const status = await previewSound.current.getStatusAsync();
-          if (status.isLoaded) { await previewSound.current.stopAsync().catch(() => {}); }
+          if (status.isLoaded) { 
+            await previewSound.current.stopAsync().catch(() => {}); 
+          }
         }, 4000) as ReturnType<typeof setTimeout>;
       }
-    } catch (error) { console.log("Preview error:", error); }
+    } catch (error) { 
+      console.log("Preview error:", error); 
+    }
   }
 
+  // --- NEW: Auto-play logic ---
   useEffect(() => {
+    // Wait 2 seconds after entering the screen, then play the default preview
+    autoPlayTimerRef.current = setTimeout(() => {
+      playPreview('WIND');
+    }, 2000);
+
     return () => {
+      // Clean up all timers and audio on exit
       if (previewTimerRef.current) clearTimeout(previewTimerRef.current);
+      if (autoPlayTimerRef.current) clearTimeout(autoPlayTimerRef.current);
       previewSound.current.unloadAsync().catch(() => {});
     };
   }, []);
 
   const handleStartSession = async () => {
     if (previewTimerRef.current) clearTimeout(previewTimerRef.current);
+    if (autoPlayTimerRef.current) clearTimeout(autoPlayTimerRef.current);
     await previewSound.current.unloadAsync().catch(() => {});
     router.push({ pathname: '/sessions/meditation', params: { duration, atmosphere } });
   };
@@ -78,7 +99,14 @@ export default function MeditationPickupScreen() {
           <Text style={styles.sectionTitle}>SELECT SOUNDSCAPE</Text>
           <View style={styles.atmosphereRow}>
             {atmospheres.map((item) => (
-              <TouchableOpacity key={item.id} style={styles.atmosphereItem} onPress={() => { setAtmosphere(item.id); playPreview(item.id); }}>
+              <TouchableOpacity 
+                key={item.id} 
+                style={styles.atmosphereItem} 
+                onPress={() => { 
+                  setAtmosphere(item.id); 
+                  playPreview(item.id); 
+                }}
+              >
                 <View style={[styles.iconSquare, atmosphere === item.id && styles.activeSquare]}>
                   <Text style={styles.iconEmoji}>{item.icon}</Text>
                 </View>
@@ -103,6 +131,7 @@ export default function MeditationPickupScreen() {
   );
 }
 
+// ... Styles stay exactly the same ...
 const styles = StyleSheet.create({
   container: { flexGrow: 1, backgroundColor: '#020403', paddingHorizontal: 30 },
   topLabelContainer: { marginTop: 60, alignItems: 'center' },
